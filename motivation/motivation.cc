@@ -6,7 +6,6 @@
 #include <fstream>
 #include <cassert>
 #include <elf.h>
-#include "slm_metrics.h"
 
 namespace motivation {
     Metrics::Metrics() :

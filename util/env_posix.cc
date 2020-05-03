@@ -36,7 +36,7 @@
 #include "util/posix_logger.h"
 
 #ifdef METRICS
-#include "motivation/slm_metrics.h"
+#include "motivation/motivation.h"
 #endif
 
 namespace leveldb {
