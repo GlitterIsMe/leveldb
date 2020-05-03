@@ -35,6 +35,10 @@
 #include "util/env_posix_test_helper.h"
 #include "util/posix_logger.h"
 
+#ifdef METRICS
+#include "motivation/slm_metrics.h"
+#endif
+
 namespace leveldb {
 
 namespace {
@@ -230,6 +234,9 @@ class PosixMmapReadableFile final : public RandomAccessFile {
 
   Status Read(uint64_t offset, size_t n, Slice* result,
               char* scratch) const override {
+#ifdef METRICS
+      motivation::metrics().AddDiskReadBytes(n);
+#endif
     if (offset + n > length_) {
       *result = Slice();
       return PosixError(filename_, EINVAL);
@@ -264,6 +271,9 @@ class PosixWritableFile final : public WritableFile {
 
   Status Append(const Slice& data) override {
     size_t write_size = data.size();
+#ifdef METRICS
+      motivation::metrics().AddDiskWriteBytes(write_size);
+#endif
     const char* write_data = data.data();
 
     // Fit as much as possible into buffer.

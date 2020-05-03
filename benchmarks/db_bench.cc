@@ -19,6 +19,10 @@
 #include "util/random.h"
 #include "util/testutil.h"
 
+#ifdef METRICS
+#include "motivation/motivation.h"
+#endif
+
 // Comma-separated list of operations to run in the specified order
 //   Actual benchmarks:
 //      fillseq       -- write N values in sequential key order in async mode
@@ -986,5 +990,6 @@ int main(int argc, char** argv) {
 
   leveldb::Benchmark benchmark;
   benchmark.Run();
+  motivation::metrics().PersistMetrics();
   return 0;
 }

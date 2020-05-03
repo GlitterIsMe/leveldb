@@ -35,6 +35,10 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 
+#ifdef METRICS
+#include "motivation/motivation.h"
+#endif
+
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
@@ -544,7 +548,9 @@ Status DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit,
 void DBImpl::CompactMemTable() {
   mutex_.AssertHeld();
   assert(imm_ != nullptr);
-
+#ifdef METRICS
+    auto start = motivation::metrics().now();
+#endif
   // Save the contents of the memtable as a new Table
   VersionEdit edit;
   Version* base = versions_->current();
@@ -572,6 +578,11 @@ void DBImpl::CompactMemTable() {
   } else {
     RecordBackgroundError(s);
   }
+#ifdef METRICS
+  auto end = motivation::metrics().now();
+  motivation::metrics().AddFlushTime(
+          std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+#endif
 }
 
 void DBImpl::CompactRange(const Slice* begin, const Slice* end) {
@@ -885,6 +896,9 @@ Status DBImpl::InstallCompactionResults(CompactionState* compact) {
 }
 
 Status DBImpl::DoCompactionWork(CompactionState* compact) {
+#ifdef METRICS
+    auto start = motivation::metrics().now();
+#endif
   const uint64_t start_micros = env_->NowMicros();
   int64_t imm_micros = 0;  // Micros spent doing imm_ compactions
 
@@ -1041,6 +1055,13 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
     RecordBackgroundError(status);
   }
   VersionSet::LevelSummaryStorage tmp;
+#ifdef METRICS
+    auto end = motivation::metrics().now();
+    motivation::metrics().AddCompactionTime(
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+    motivation::metrics().AddCompactionWriteBytes(stats.bytes_written);
+    motivation::metrics().AddCompactionReadBytes(stats.bytes_read);
+#endif
   Log(options_.info_log, "compacted to: %s", versions_->LevelSummary(&tmp));
   return status;
 }
@@ -1111,6 +1132,9 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
                    std::string* value) {
   Status s;
   MutexLock l(&mutex_);
+#ifdef METRICS
+    auto start = motivation::metrics().now();
+#endif
   SequenceNumber snapshot;
   if (options.snapshot != nullptr) {
     snapshot =
@@ -1151,6 +1175,11 @@ Status DBImpl::Get(const ReadOptions& options, const Slice& key,
   mem->Unref();
   if (imm != nullptr) imm->Unref();
   current->Unref();
+#ifdef METRICS
+    auto end = motivation::metrics().now();
+    motivation::metrics().AddReadLatency(
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+#endif
   return s;
 }
 
@@ -1193,6 +1222,9 @@ Status DBImpl::Delete(const WriteOptions& options, const Slice& key) {
 }
 
 Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
+#ifdef METRICS
+    auto start = motivation::metrics().now();
+#endif
   Writer w(&mutex_);
   w.batch = updates;
   w.sync = options.sync;
@@ -1204,6 +1236,11 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     w.cv.Wait();
   }
   if (w.done) {
+#ifdef METRICS
+      auto end = motivation::metrics().now();
+      motivation::metrics().AddWriteLatency(
+              std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+#endif
     return w.status;
   }
 
@@ -1222,6 +1259,9 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
     // into mem_.
     {
       mutex_.Unlock();
+#ifdef METRICS
+          auto start_wal = motivation::metrics().now();
+#endif
       status = log_->AddRecord(WriteBatchInternal::Contents(write_batch));
       bool sync_error = false;
       if (status.ok() && options.sync) {
@@ -1230,8 +1270,21 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
           sync_error = true;
         }
       }
+#ifdef METRICS
+          auto end_wal = motivation::metrics().now();
+          motivation::metrics().AddWALLatency(
+                  std::chrono::duration_cast<std::chrono::microseconds>(end_wal - start_wal).count());
+#endif
       if (status.ok()) {
+#ifdef METRICS
+          auto start_mem_insert = motivation::metrics().now();
+#endif
         status = WriteBatchInternal::InsertInto(write_batch, mem_);
+#ifdef METRICS
+          auto end_mem_insert = motivation::metrics().now();
+          motivation::metrics().AddMemtableLatency(
+                  std::chrono::duration_cast<std::chrono::microseconds>(end_mem_insert - start_mem_insert).count());
+#endif
       }
       mutex_.Lock();
       if (sync_error) {
@@ -1261,7 +1314,11 @@ Status DBImpl::Write(const WriteOptions& options, WriteBatch* updates) {
   if (!writers_.empty()) {
     writers_.front()->cv.Signal();
   }
-
+#ifdef METRICS
+    auto end = motivation::metrics().now();
+    motivation::metrics().AddWriteLatency(
+            std::chrono::duration_cast<std::chrono::microseconds>(end - start).count());
+#endif
   return status;
 }
 
