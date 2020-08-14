@@ -8,6 +8,8 @@
 #include "db/filename.h"
 #include "db/table_cache.h"
 #include "db/version_edit.h"
+#include <util/statistics.h>
+
 #include "leveldb/db.h"
 #include "leveldb/env.h"
 #include "leveldb/iterator.h"
@@ -46,10 +48,14 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 
     // Finish and check for file errors
     if (s.ok()) {
+      auto start = Statistics::StartTiming();
       s = file->Sync();
+      global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
     }
     if (s.ok()) {
+      auto start = Statistics::StartTiming();
       s = file->Close();
+      global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
     }
     delete file;
     file = nullptr;

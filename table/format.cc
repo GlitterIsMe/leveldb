@@ -4,7 +4,10 @@
 
 #include "table/format.h"
 
+#include <util/statistics.h>
+
 #include "leveldb/env.h"
+
 #include "port/port.h"
 #include "table/block.h"
 #include "util/coding.h"
@@ -72,7 +75,9 @@ Status ReadBlock(RandomAccessFile* file, const ReadOptions& options,
   size_t n = static_cast<size_t>(handle.size());
   char* buf = new char[n + kBlockTrailerSize];
   Slice contents;
+  auto start = Statistics::StartTiming();
   Status s = file->Read(handle.offset(), n + kBlockTrailerSize, &contents, buf);
+  global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
   if (!s.ok()) {
     delete[] buf;
     return s;

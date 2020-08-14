@@ -4,11 +4,14 @@
 
 #include "leveldb/table.h"
 
+#include <util/statistics.h>
+
 #include "leveldb/cache.h"
 #include "leveldb/comparator.h"
 #include "leveldb/env.h"
 #include "leveldb/filter_policy.h"
 #include "leveldb/options.h"
+
 #include "table/block.h"
 #include "table/filter_block.h"
 #include "table/format.h"
@@ -44,8 +47,10 @@ Status Table::Open(const Options& options, RandomAccessFile* file,
 
   char footer_space[Footer::kEncodedLength];
   Slice footer_input;
+  auto start = Statistics::StartTiming();
   Status s = file->Read(size - Footer::kEncodedLength, Footer::kEncodedLength,
                         &footer_input, footer_space);
+  global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
   if (!s.ok()) return s;
 
   Footer footer;

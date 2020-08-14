@@ -35,6 +35,8 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 
+#include "util/statistics.h"
+
 namespace leveldb {
 
 const int kNumNonTableCacheFiles = 10;
@@ -683,7 +685,9 @@ void DBImpl::BackgroundCall() {
   } else if (!bg_error_.ok()) {
     // No more background work after a background error.
   } else {
+    auto start = Statistics::StartTiming();
     BackgroundCompaction();
+    global_statistics().RecordLatency(TotalLat, Statistics::EndTiming(start));
   }
 
   background_compaction_scheduled_ = false;
@@ -842,10 +846,14 @@ Status DBImpl::FinishCompactionOutputFile(CompactionState* compact,
 
   // Finish and check for file errors
   if (s.ok()) {
+    auto start = Statistics::StartTiming();
     s = compact->outfile->Sync();
+    global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
   }
   if (s.ok()) {
+    auto start = Statistics::StartTiming();
     s = compact->outfile->Close();
+    global_statistics().RecordLatency(IOLat, Statistics::EndTiming(start));
   }
   delete compact->outfile;
   compact->outfile = nullptr;
